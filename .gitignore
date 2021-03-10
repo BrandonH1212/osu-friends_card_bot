@@ -3,5 +3,6 @@
 /.idea
 /__pycache__
 credentials.py
-
+credentials.json
+__pycache__/
 venv

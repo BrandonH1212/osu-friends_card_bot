@@ -6,6 +6,7 @@ from PIL import Image, ImageFont, ImageDraw
 from datetime import datetime, timezone
 from discord.ext import commands, tasks
 import credentials
+from minigames.osu_manager.osu_manager import OsuManager
 
 claim_reset_time = 1615139154
 TestKey = credentials.TestKey
@@ -27,7 +28,7 @@ client = gspread.authorize(creds)
 
 
 # Get the different sheets
-spreadsheet = client.open("OsuTowerDB")
+spreadsheet = client.open("osuManagerTest")
 p_sheet = spreadsheet.get_worksheet(0)
 c_sheet = spreadsheet.get_worksheet(1)
 map_sheet = spreadsheet.get_worksheet(2)
@@ -1057,4 +1058,5 @@ async def on_raw_reaction_add(payload):
 pprint(get_utc_timestep())
 
 # Run the bot
+bot.add_cog(OsuManager(bot))
 bot.run(liveKey)
