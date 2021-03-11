@@ -520,7 +520,6 @@ async def reaction_response(menu_id, discord_id, edit_message):
 
             if menu_id == "👍":
                 if str(substate[1]) == "3":  # range approval menu range selected
-                    substate = await get_player_sub_state(discord_id, "^")
                     await get_random_choices(discord_id, edit_message, substate[2], substate[3])
                     return
 
@@ -529,20 +528,22 @@ async def reaction_response(menu_id, discord_id, edit_message):
                 await random_range_menu(discord_id, edit_message)
                 return
 
-                num_list = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "♾"]
+            num_list = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "♾"]
 
-                for i, num in enumerate(num_list):
-                    if menu_id == num:
-                        if substate[1] == "1":
-                            await update_player_state(discord_id, f"RRM^2^{i + 1}^-1")
-                        elif substate[1] == "2":
-                            if num_list[i] == "♾":
-                                await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^99")
-                            else:
-                                await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^{i + 1}")
+            for i, num in enumerate(num_list):
+                if menu_id == num:
+                    if str(substate[1]) == "1":
+                        await update_player_state(discord_id, f"RRM^2^{i + 1}^-1")
 
-                        await random_range_menu(discord_id, edit_message)
-                return
+
+                    elif str(substate[1]) == "2":
+                        if num_list[i] == "♾":
+                            await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^99")
+                        else:
+                            await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^{i + 1}")
+                    await random_range_menu(discord_id, edit_message)
+                    return
+
 
         # Random map choice
         if "rmap" in player_state:
