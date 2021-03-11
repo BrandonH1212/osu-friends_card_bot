@@ -1,0 +1,9 @@
+{
+  "MENU_MAPPING": {
+    "image": "menu_base.png",
+    "image_path": "menu/menu_base.png",
+    "mapping": [
+      ["menu/menu_base.png", null]
+    ]
+  }
+}

@@ -3,6 +3,9 @@ osu manager cog
 """
 
 from discord.ext import commands
+from discord import File
+from .lib.drawing import get_dump_image
+from config.config import img_config
 
 
 class OsuManager(commands.Cog):
@@ -17,3 +20,8 @@ class OsuManager(commands.Cog):
     @manage.command(name='help')
     async def help(self, ctx):
         await ctx.send("This is a help page.")
+
+    @manage.command(name='menu')
+    async def menu(self, ctx):
+        file_path = get_dump_image(img_config.MENU_MAPPING)
+        await ctx.send(file=File(file_path))

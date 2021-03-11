@@ -1,5 +1,5 @@
-*.json
 /cards
+image_dump
 /.idea
 /__pycache__
 credentials.py
