@@ -559,6 +559,10 @@ async def reaction_response(menu_id, discord_id, edit_message):
             if menu_id == "3️⃣":  # Select Number 3 In random three card selection
                     await map_card_menu(discord_id, edit_message, substate[3], 1)
 
+            if menu_id == "😢":  # Scrap the play
+                await give_BB(discord_id, 5)
+                await open_daily_menu(discord_id, edit_message)
+
             return
 
 
@@ -599,7 +603,13 @@ async def reaction_response(menu_id, discord_id, edit_message):
 
                 else:  # Else we close the menu in case the player tries to react prematurely
                     await close_menus(discord_id, edit_message.channel.id)
+
+            if menu_id == "😢":  # Scrap the play
+                await give_BB(discord_id, 5)
+                await open_daily_menu(discord_id, edit_message)
+
             return
+
 
         # Inventory menu reactions
         if "inv" in player_state:
@@ -782,7 +792,7 @@ async def random_range_menu(discord_id, edit_message, min=-1, max=-1):
     await edit_message.add_reaction("🔄")
 
 
-# Buy token approval menu
+# Approval menus basically all the same with minor changes
 async def buy_token_approval_menu(discord_id, edit_message):
     if int(await get_BB(discord_id)) > 9:
         embed = discord.Embed(title=f"{get_osu_name(discord_id)} Spend 10 BB for 1 Daily token?",
@@ -869,12 +879,14 @@ async def get_random_choices(discord_id, edit_message, min=0, max=99):
                           f"CS: {map3.diff_size}\n"
                           f"OD: {map3.diff_overall}    "
                           f"HP: {map3.diff_drain}",inline=False)
+    embed.add_field(name="use 😢 to scrap the attempt", value='(+5 BB)', inline=False)
 
     await edit_message.edit(content=f"", embed=embed)
 
     await edit_message.add_reaction("1️⃣")
     await edit_message.add_reaction("2️⃣")
     await edit_message.add_reaction("3️⃣")
+    await edit_message.add_reaction("😢")
     await update_player_state(discord_id, f"rmap!{choice1}!{choice2}!{choice3}")
 
 
@@ -901,9 +913,10 @@ async def map_card_menu(discord_id, edit_message, map_id, play_id):
         await edit_message.add_reaction("👌")
         await update_player_state(discord_id, f"map@{play_info[2]}@{map_id}")
 
-    await edit_message.edit(content=f"",embed=embed)
-
     await edit_message.add_reaction("🔄")
+
+    await edit_message.edit(content=f"", embed=embed)
+
 
 # Gets the play Info from local database takes
 async def get_play_info(play_id, discord_id):
@@ -978,7 +991,7 @@ async def _card(ctx, card_id="0"):
 
 # Opens the main player menu if there's already menu open closes it
 # Also adds that message to the message cash
-@bot.command(aliases=["m", 'Menu', 'menu'])
+@bot.command(aliases=["m", "M", 'Menu', 'menu'])
 async def _menu(ctx):
     osu_name = get_osu_name(str(ctx.author.id))
     if osu_name != "null":
@@ -1001,7 +1014,7 @@ async def _menu(ctx):
         await ctx.send("Discord ID not attached to existing account \nUse !register (osu_username)")
 
 # Opens the random map or selected map menu if available
-@bot.command(aliases=['b', 'Bump', 'bump'])
+@bot.command(aliases=['b', 'B', 'Bump', 'bump'])
 async def _bump(ctx):
     if is_registered(ctx.author.id):
         playerState = await get_player_state(ctx.author.id)
@@ -1036,6 +1049,8 @@ async def _inventory_menu(ctx, page=0):
         await reaction_response("💼", ctx.author.id, message)
     else:
         await ctx.send("Discord ID not attached to existing account \nUse !register (osu_username)")
+
+    await ctx.message.delete()
 
 # Checks if a reaction can happen
 async def is_valid_member_reaction(discord_id, message_id):
