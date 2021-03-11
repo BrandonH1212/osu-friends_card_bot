@@ -462,11 +462,14 @@ async def get_card_file(card_id):
 # This is called any time a reaction is made it will open other menus based on the players state and what they reacted with
 async def reaction_response(menu_id, discord_id, edit_message):
     if is_registered(discord_id):
+        player_state = await get_player_state(discord_id)
 
-        if menu_id == "⛔": # Close all menus
+    # Generic reactions
+
+        if menu_id == "⛔":  # Close all menus
             await close_menus(discord_id, edit_message.channel.id)
 
-        if menu_id == "💼": # Open inventory
+        if menu_id == "💼":  # Open inventory
             substate = await get_player_sub_state(discord_id, "|")
             if len(substate) > 1:
                 await open_inventory_menu(discord_id, edit_message, substate[1])
@@ -475,11 +478,11 @@ async def reaction_response(menu_id, discord_id, edit_message):
                 await open_inventory_menu(discord_id, edit_message)
                 return
 
-        if menu_id == "💰": # Open daily
+        if menu_id == "💰":  # Open daily
             await open_daily_menu(discord_id, edit_message)
             return
 
-        if menu_id == "🤝": # Open trade
+        if menu_id == "🤝":  # Open trade
             substate = await get_player_sub_state(discord_id, ":")
             if len(substate) > 1:
                 await open_trade_menu(discord_id, edit_message, substate[1])
@@ -488,170 +491,143 @@ async def reaction_response(menu_id, discord_id, edit_message):
                 await open_trade_menu(discord_id, edit_message, 0)
                 return
 
-        if menu_id == "⏩": # Generic next
-            if "inv" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "|")
-                await open_inventory_menu(discord_id, edit_message, int(substate[1])+1)
-                return
-            else: # placeholder
-                await edit_message.add_reaction("⏪")
-                await edit_message.add_reaction("⏩")
-                return
-
-        if menu_id == "⏪": # Generic Previous
-            if "inv" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "|")
-                await open_inventory_menu(discord_id, edit_message, int(substate[1]) - 1)
-                return
-            else: # placeholder
-                await edit_message.add_reaction("⏪")
-                await edit_message.add_reaction("⏩")
-                return
-
-        if menu_id == "🤷‍♂️": # No cards in inventory open daily
-            if "inv" in await get_player_state(discord_id):
-                await open_daily_menu(discord_id, edit_message)
-                return
-
-        if menu_id == "👀": # Inspect card in inventory
-            if "inv" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "|")
-                user = await bot.fetch_user(int(discord_id))
-                await edit_message.edit(content="Loading...", embed=None)
-                upload =  await edit_message.channel.send(user.mention, file=discord.File(await get_card_file(substate[2])))
-                await open_inventory_menu(discord_id, edit_message, substate)
-                return
-
-        if menu_id == "💲": # sell inventory card
-            if "inv" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "|")
-                await edit_message.edit(content="Loading...", embed=None)
-                await confirm_sell_card(discord_id, edit_message, substate[2])
-                return
-
-        if menu_id == "✔": # Approve sell inventory card
-            if "inv" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "|")
-                await edit_message.edit(content="Loading...", embed=None)
-                if len(substate) > 3:
-                    await sell_card(discord_id, edit_message, substate[2])
-                    return
-
-        if menu_id == "🎲": # Daily random three
-            if "day_m" in await get_player_state(discord_id):
-                await random_approval_menu(discord_id, edit_message)
-                return
-
-        if menu_id == "⭐": # Claim daily token
-            if "day_m" in await get_player_state(discord_id):
-                await claim_daily(discord_id)
-                await open_daily_menu(discord_id, edit_message)
-                return
-
-        if menu_id == "👍": # Generic thumbs-up
-            if "RCM" in await get_player_state(discord_id): # random 3 approval menu
-                if int(await get_tokens(discord_id)) > 0:
-                    await give_tokens(discord_id, -1)
-                    await get_random_choices(discord_id, edit_message)
-                    return
-
-            if"RRAM" in await get_player_state(discord_id): # Range approval menu
-                if int(await get_tokens(discord_id)) > 1:
-                    await give_tokens(discord_id, -2)
-                    await random_range_menu(discord_id, edit_message)
-                    return
-
-            if "RRM^3" in await get_player_state(discord_id): # range approval menu range selected
-                substate = await get_player_sub_state(discord_id, "^")
-                await get_random_choices(discord_id, edit_message, substate[2], substate[3])
-                return
-
-            if "BTAM": # Approval menu for converting BB to daily token
-                if int(await get_BB(discord_id)) >= 10:
-                    await give_BB(discord_id, -10)
-                    await give_tokens(discord_id, 1)
-                    await open_daily_menu(discord_id, edit_message)
-                    return
-
-        if menu_id == "❌": # Generic X Opens daily menu
+        if menu_id == "❌":  # Generic X Opens daily menu
             await open_daily_menu(discord_id, edit_message)
             return
 
-        if menu_id == "1️⃣": # Select Number 1 In random three card selection
-            if "rmap" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "!")
-                await map_card_menu(discord_id, edit_message, substate[1],1)
-                return
+    # Reaction menus
 
-        if menu_id == "2️⃣":# Select Number 2 In random three card selection
-            if "rmap" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "!")
-                await map_card_menu(discord_id, edit_message, substate[2],1)
-                return
+        # Daily menu
+        if "day_m" in player_state:
+            if menu_id == "🎲":  # Daily random three
+                await random_approval_menu(discord_id, edit_message)
 
-        if menu_id == "3️⃣":# Select Number 3 In random three card selection
-            if "rmap" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "!")
-                await map_card_menu(discord_id, edit_message, substate[3],1)
-                return
+            if menu_id == "⭐":  # Claim daily token
+                await claim_daily(discord_id)
+                await open_daily_menu(discord_id, edit_message)
 
-        # Really messy way of looping through 1-9 emoji's and checking If there In random range menu
-        num_list = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "♾"]
+            if menu_id == "🔄": # For exchanging BB
+                await buy_token_approval_menu(discord_id, edit_message)
 
-        for i, num in enumerate(num_list):
-            if menu_id == num:
+            if menu_id == "🎯":  # opens targeted range approval menu
+                await random_range_approval_menu(discord_id, edit_message)
+            return
 
-                substate = await get_player_sub_state(discord_id, "^")
+        # Random range menu
+        if "RRM" in player_state:
 
-                if "RRM" in await get_player_state(discord_id):
-                    if substate[1] == "1":
-                        await update_player_state(discord_id, f"RRM^2^{i+1}^-1")
-                    elif substate[1] == "2":
-                        if num_list[i] == "♾":
-                            await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^99")
-                        else:
-                            await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^{i+1}")
+            substate = await get_player_sub_state(discord_id, "^")
 
-                    await random_range_menu(discord_id, edit_message)
+            if menu_id == "👍":
+                if str(substate[1]) == "3":  # range approval menu range selected
+                    substate = await get_player_sub_state(discord_id, "^")
+                    await get_random_choices(discord_id, edit_message, substate[2], substate[3])
                     return
 
-
-        if menu_id == "🔄": # Generic refresh
-
-            if "map@" in await get_player_state(discord_id): # check for player recent score
-                substate = await get_player_sub_state(discord_id, "@")
-                await map_card_menu(discord_id, edit_message, substate[2],1)
-                return
-
-            if "day_m" in await get_player_state(discord_id): # opens BB to token approval menu
-                await buy_token_approval_menu(discord_id, edit_message)
-                return
-
-
-            if "RRM" in await get_player_state(discord_id): # restarts targeted range menu
+            if menu_id == "🔄":  # Generic refresh
                 await update_player_state(discord_id, "RRM^1^-1^-1")
                 await random_range_menu(discord_id, edit_message)
                 return
 
-        if menu_id == "🎯": # opens targeted range approval menu
-            if "day_m" in await get_player_state(discord_id):
-                await random_range_approval_menu(discord_id, edit_message)
+                num_list = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "♾"]
+
+                for i, num in enumerate(num_list):
+                    if menu_id == num:
+                        if substate[1] == "1":
+                            await update_player_state(discord_id, f"RRM^2^{i + 1}^-1")
+                        elif substate[1] == "2":
+                            if num_list[i] == "♾":
+                                await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^99")
+                            else:
+                                await update_player_state(discord_id, f"RRM^3^{int(substate[2])}^{i + 1}")
+
+                        await random_range_menu(discord_id, edit_message)
                 return
 
-        #if menu_id == "©":
-         #   if "map@" in await get_player_state(discord_id):
-           #     substate = await get_player_sub_state(discord_id, "@")
-            #    await map_card_menu(discord_id, edit_message, substate[2],2)
+        # Random map choice
+        if "rmap" in player_state:
+            substate = await get_player_sub_state(discord_id, "!")
 
-        if menu_id == "👌": # aproval for submitting score
-            if "map@" in await get_player_state(discord_id):
-                substate = await get_player_sub_state(discord_id, "@")
+            if menu_id == "1️⃣":  # Select Number 1 In random three card selection
+                    await map_card_menu(discord_id, edit_message, substate[1], 1)
+
+
+            if menu_id == "2️⃣":  # Select Number 2 In random three card selection
+                    await map_card_menu(discord_id, edit_message, substate[2], 1)
+
+            if menu_id == "3️⃣":  # Select Number 3 In random three card selection
+                    await map_card_menu(discord_id, edit_message, substate[3], 1)
+
+            return
+
+
+        if "RCM" in player_state:  # random 3 approval menu
+            if menu_id == "👍":  # Generic thumbs-up
+                if int(await get_tokens(discord_id)) > 0:
+                    await give_tokens(discord_id, -1)
+                    await get_random_choices(discord_id, edit_message)
+            return
+
+        # Range approval menu
+        if "RRAM" in player_state:
+            if menu_id == "👍":  # Generic thumbs-up
+                if int(await get_tokens(discord_id)) > 1:
+                    await give_tokens(discord_id, -2)
+                    await random_range_menu(discord_id, edit_message)
+            return
+
+        # Approval menu for converting BB to daily token
+        if "BTAM":
+            if menu_id == "👍":
+                if int(await get_BB(discord_id)) >= 10:
+                    await give_BB(discord_id, -10)
+                    await give_tokens(discord_id, 1)
+                    await open_daily_menu(discord_id, edit_message)
+                return
+
+        # Submit score menu
+        if "map@" in player_state: # check for player recent score
+            substate = await get_player_sub_state(discord_id, "@")
+
+            if menu_id == "🔄":  # check for player recent score
+                await map_card_menu(discord_id, edit_message, substate[2], 1)
+
+            if menu_id == "👌":  # aproval for submitting score
                 if int(substate[1]) == 100:
                     await award_card_menu(discord_id, edit_message, substate[2], substate[1])
-                    return
-                else: # Else we close the menu in case the player tries to react prematurely
+
+                else:  # Else we close the menu in case the player tries to react prematurely
                     await close_menus(discord_id, edit_message.channel.id)
-                    return
+            return
+
+        # Inventory menu reactions
+        if "inv" in player_state:
+            substate = await get_player_sub_state(discord_id, "|")
+
+            if menu_id == "⏩":  # next
+                await open_inventory_menu(discord_id, edit_message, int(substate[1]) + 1)
+
+            if menu_id == "⏪":  # Previous
+                await open_inventory_menu(discord_id, edit_message, int(substate[1]) - 1)
+
+            if menu_id == "🤷‍♂️": # No cards
+                await open_daily_menu(discord_id, edit_message)
+
+            if menu_id == "👀":  # Inspect card in inventory
+                user = await bot.fetch_user(int(discord_id))
+                await edit_message.edit(content="Loading...", embed=None)
+                upload = await edit_message.channel.send(user.mention, file=discord.File(await get_card_file(substate[2])))
+                await open_inventory_menu(discord_id, edit_message, substate)
+
+            if menu_id == "💲":  # sell inventory card
+                await edit_message.edit(content="Loading...", embed=None)
+                await confirm_sell_card(discord_id, edit_message, substate[2])
+
+            if menu_id == "✔":  # Approve sell inventory card
+                await edit_message.edit(content="Loading...", embed=None)
+                if len(substate) > 3:
+                    await sell_card(discord_id, edit_message, substate[2])
+            return
 
 # open Player inventory menu At a specific page Page is a string because discord api
 async def open_inventory_menu(discord_id, edit_message, page='0'):
@@ -1080,4 +1056,4 @@ async def on_raw_reaction_add(payload):
 pprint(get_utc_timestep())
 
 # Run the bot
-bot.run(liveKey)
+bot.run(TestKey)
