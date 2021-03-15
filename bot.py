@@ -32,12 +32,14 @@ p_sheet = spreadsheet.get_worksheet(0)
 c_sheet = spreadsheet.get_worksheet(1)
 map_sheet = spreadsheet.get_worksheet(2)
 state_sheet = spreadsheet.get_worksheet(3)
+arena_sheet = spreadsheet.get_worksheet(4)
 
 # Get the different sheet rows
-player_rows = p_sheet.batch_get(['A2:H100'])[0]
-map_rows = map_sheet.batch_get(['A2:c2000'])[0]
-card_rows = c_sheet.batch_get(['A2:H2000'])[0]
+player_rows = p_sheet.batch_get(['A2:H1000'])[0]
+map_rows = map_sheet.batch_get(['A2:c5000'])[0]
+card_rows = c_sheet.batch_get(['A2:H5000'])[0]
 state_rows = map_sheet.batch_get(['A2:b2000'])[0]
+arena_rows = arena_sheet.batch_get(['A2:e2000'])[0]
 
 
 # Saved list for discrete users only applies at runtime Saves the discord ID, message ID
@@ -58,12 +60,18 @@ sorted_star_list = []
 # Local version of card sheet updated every time cards are added
 card_reference_list = {}
 
+#Local reference list for the arena
+arena_reference_list = {}
+
 
 # Create card reference list from real sheet
 for i, cards in enumerate(card_rows):
     card_reference_list[str(cards[0])] = [str(i+1), cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7]]
                         # id index difficulty id	score	accuracy	rank	mods	initially obtained Combo
 
+# Create arena reference list
+for i, arenas in enumerate(arena_rows):
+    arena_reference_list[arenas[0]] = [arenas[1], arenas[2], arenas[3], arenas[4]]
 
 # Create sorted star list and map_list and sorted_star_list from real sheet
 for i, map in enumerate(map_rows):
@@ -128,6 +136,22 @@ async def get_player_sub_state(discord_id, divider):
 async def update_player_state(discord_id, new_state):
     p_sheet.update_cell(get_player_row_index(str(discord_id)), 5, str(new_state))
     player_reference_list.get(str(discord_id))[3] = str(new_state)
+
+
+async def add_arena(card_id, discord_id, win_condition='1'):
+    utc = str(round(get_utc_timestep()))
+    arena_sheet.append_row([str(len(arena_reference_list)), str(card_id), str(discord_id), utc, win_condition])
+    arena_reference_list[str(len(arena_reference_list))] = [str(card_id), str(discord_id), utc, str(win_condition)]
+
+async def is_arena_valid(arena_id):
+    return arena_id in arena_reference_list
+
+def get_active_arenas():
+    arenas = []
+    for arena_id in arena_reference_list:
+        arena = arena_reference_list.get(arena_id)
+        arenas.append([arena[0], arena[1], arena[2], arena[3]])  # card_id 0 discord_id 1 time_created 2  win_condition 3
+    return arenas
 
 # Gets the players osu_name they registered with if they're not registered return null
 def get_osu_name(discord_id):
@@ -197,7 +221,11 @@ async def get_tokens(discord_id):
 # Get the number of BB a player has
 # returns a string so convert if you need to do math
 async def get_BB(discord_id):
-    return player_reference_list.get(str(discord_id))[6]
+    try:
+        BB = int(player_reference_list.get(str(discord_id))[6])
+    except:
+        BB = 0
+    return BB
 
 # Gets all the card ids in the players inventory if they don't have any returns an empty list
 #   [213,435,76,44] These will be strings by default
@@ -495,7 +523,13 @@ async def reaction_response(menu_id, discord_id, edit_message):
             await open_daily_menu(discord_id, edit_message)
             return
 
+        if menu_id == '🩸':  # Open fight menu
+                #await update_player_state(discord_id, f"c_fight+none+0")
+                await card_fight_menu(discord_id, edit_message)
+
     # Reaction menus
+
+
 
         # Daily menu
         if "day_m" in player_state:
@@ -610,6 +644,12 @@ async def reaction_response(menu_id, discord_id, edit_message):
 
             return
 
+        if "claiming" in player_state:
+            substate = await get_player_sub_state(discord_id, "&")
+
+            if menu_id == "🔄":
+                await check_defeat_card(discord_id, edit_message, substate[1])
+
 
         # Inventory menu reactions
         if "inv" in player_state:
@@ -634,11 +674,133 @@ async def reaction_response(menu_id, discord_id, edit_message):
                 await edit_message.edit(content="Loading...", embed=None)
                 await confirm_sell_card(discord_id, edit_message, substate[2])
 
+            if menu_id == "💢": # Select card for arena
+                await update_player_state(discord_id, f"c_fight+{substate[2]}+0")
+                await card_fight_menu(discord_id, edit_message)
+
             if menu_id == "✔":  # Approve sell inventory card
                 await edit_message.edit(content="Loading...", embed=None)
                 if len(substate) > 3:
                     await sell_card(discord_id, edit_message, substate[2])
             return
+
+        if "c_fight" in player_state:
+            sub_state = await get_player_sub_state(discord_id, "+")
+
+            if menu_id == "💢":  # Open fight menu
+                if sub_state[2] == "1":
+                    await card_fight_create_menu(discord_id, edit_message, sub_state[1])
+                return
+
+            if menu_id == "👁":
+                pass
+
+        if "f_fight" in player_state:
+            sub_state = await get_player_sub_state(discord_id, "+") # Useless 0 card ID 1 win condition 2
+
+            if menu_id == "‼":  # Set up fight
+                bb = await get_BB(discord_id)
+                await update_player_state(discord_id, f"c_fight+nope+0")
+
+                if bb >= 10:
+                    if len(get_active_arenas()) < 3:
+                        #await give_BB(discord_id, -10)
+                        await add_arena(sub_state[1], discord_id, sub_state[2])
+                        #await remove_card(discord_id, sub_state[2])
+                        await pm_player(discord_id, f"CardID {sub_state[2]} has been removed from your inventory\nAnd the arena has been created good luck!")
+
+                await card_fight_menu(discord_id, edit_message)
+
+
+            if menu_id == "🏆":  # Change condition
+                if int(sub_state[2]) == 3:
+                    await update_player_state(discord_id, f"f_fight+{sub_state[1]}+1")
+                else:
+                    await update_player_state(discord_id, f"f_fight+{sub_state[1]}+{int(sub_state[2])+1}")
+
+                await card_fight_create_menu(discord_id, edit_message, sub_state[1])
+
+            return
+
+  #            index0  difficultyID1 score2	accuracy3	rank4	mods5	initially obtained6 Combo7
+
+async def card_fight_menu(discord_id, edit_message):
+    player_BB = await get_BB(discord_id)
+    arenas = get_active_arenas()
+    try:
+        sub_state = await get_player_sub_state(discord_id, "+")
+        card = card_reference_list.get(str(sub_state[1]))
+        bmap = osuapi.get_beatmaps(beatmap_id=int(card[1]))[0]
+        map_info = [bmap.title, f"⭐ {bmap.difficultyrating}"]
+
+    except:
+        sub_state = [0, 0, 0]
+        card = [0,0,0,0,0,0,0,0]
+        bmap = None
+        map_info = ["None selected use 💼 to select one", ""]
+
+    embed = discord.Embed(title=f"{get_osu_name(discord_id)}'s card fight menu", description=f"{len(arenas)}/3 cards In the arena\n Balance BB: {player_BB}\n"
+                                                                                             f"Selected card {map_info[0]} {map_info[1]}")
+    if len(arenas) < 3:
+        embed.add_field(name=f"💢 Put a card in the arena (24HR)",
+                        value="(spend 10 BB) "
+                              "Puts the selected card in the arena for 24 hours if a player defeats the card it is lost if not 10BB for every player defeated")
+    else:
+        embed.add_field(name=f"☹ Arena is full",
+                        value="There are currently 3/3 cards in the arena submissions are closed please defeat one of the other cards or wait for them to timeout")
+
+    embed.add_field(name=f"👁 View cards in the arena",
+                    value="Take a look at what people have put in the arena challenge them if you dare!")
+
+    await edit_message.edit(content="", embed=embed)
+
+    if bmap is not None:
+        await update_player_state(discord_id, f"c_fight+{sub_state[1]}+1")
+        if player_BB >= 10:
+            await edit_message.add_reaction("💢")
+    else:
+        await update_player_state(discord_id, f"c_fight+nope+0")
+    await edit_message.add_reaction("👁")
+    await edit_message.add_reaction("💼")
+
+
+async def card_fight_create_menu(discord_id, edit_message, card_id):
+    sub_state = await get_player_sub_state(discord_id, "+")
+    win_condition = int(sub_state[2])
+    arenas = get_active_arenas()
+
+    if win_condition == 1:
+        win_text = "Score"
+    if win_condition == 2:
+        win_text = "accuracy"
+    if win_condition == 3:
+        win_text = "combo"
+    await update_player_state(discord_id, f"f_fight+{sub_state[1]}+{sub_state[2]}")
+    card = card_reference_list.get(card_id)
+    bmap = osuapi.get_beatmaps(beatmap_id=int(card[1]))[0]
+    embed = discord.Embed(title=f"Fight confirmation menu for {get_osu_name(discord_id)}",
+                          description=f"Balance BB: {await get_BB(discord_id)} There are currently {len(arenas)}/3 cards In the arena\n"
+                                      f"‼ Submit card (Spend 10BB) 🏆 Change win condition ({win_text})\n\n"
+                                      f"Challenger must get a ({win_text}) equal or greater than the cards\n"
+                                      f"{bmap.title}\n"
+                                      f"{bmap.version} ⭐ {bmap.difficultyrating}\n"
+                                      f"Score: {card[2]} Combo: {card[7]}\n"
+                                      f"Rank: {card[4]}  ACC%: {card[3]}\n"
+                                      f"mods: {card[5]}\n")
+
+    await edit_message.edit(embed=embed, content='')
+    await edit_message.add_reaction("‼")
+    await edit_message.add_reaction("🏆")
+    await edit_message.add_reaction("💼")
+
+
+async def compare_play_to_card(card_id, play, condition=0, forced_mods=1):
+    # condition ints 0 = score, 1 = acc, 2 = combo (For now only score will work) (And mods will always be forced)
+    card = card_reference_list.get(card_id)
+    if str(card[5]) == str(play.enabled_mods):
+        if int(play.score) > int(card[2]):
+            return True
+    return False
 
 # open Player inventory menu At a specific page Page is a string because discord api
 async def open_inventory_menu(discord_id, edit_message, page='0'):
@@ -663,6 +825,7 @@ async def open_inventory_menu(discord_id, edit_message, page='0'):
                             description=f"You have {len(card_ids)} Cards\n"
                                         f"⏪ Previous 👀 View card image ⏩ Next\n"
                                         f"💲 Sell card for 5 BB\n"
+                                        f"💢 Select card for arena\n"
                                         f"Inventory menu page: {new_page+1}")
     try:
         card = card_reference_list.get(card_ids[new_page])
@@ -693,6 +856,7 @@ async def open_inventory_menu(discord_id, edit_message, page='0'):
         await edit_message.add_reaction("⏩")
 
     await edit_message.add_reaction("💲")
+    await edit_message.add_reaction("💢")
 
 
 # Confirm Sell card menu
@@ -947,12 +1111,59 @@ async def close_menus(discord_id, channel_id):
             await message.delete()
             cashed_messages.remove(menus)
 
+    #            index0  difficultyID1 score2	accuracy3	rank4	mods5	initially obtained6 Combo7
+async def check_defeat_card(discord_id, edit_message, card_id):
+    card = card_reference_list.get(card_id)
+    bmap = osuapi.get_beatmaps(beatmap_id=card[1])[0]
+    try:
+        play = await get_matching_score(discord_id, int(card[1]))
+    except:
+        play = None
+
+    embed = discord.Embed(title=f"{get_osu_name(discord_id)} is trying to defeat {card[6]}s" ,
+                          description=f"mods = forced\n capture condition = score")
+    embed.add_field(name=f"{bmap.title}\n ⭐ {round(bmap.difficultyrating, 2)} {bmap.version}",
+                    value=f"Original play {card[6]}\n"
+                          f"Score {card[2]}\n"
+                          f"Accuracy %{card[3]}\n"
+                          f"Combo {card[7]}\n"
+                          f"Rank {card[4]}\n"
+                          f"mods {card[5]}")
+    if play != None:
+        embed.add_field(name=f"{bmap.title}\n ⭐ {round(bmap.difficultyrating, 2)} {bmap.version}",
+                        value=f"Submitted by {get_osu_name(discord_id)}\n"
+                              f"Score {play.score}\n"
+                              f"Accuracy %{get_acc(play)}\n"
+                              f"Combo {play.maxcombo}\n"
+                              f"Rank {play.rank}\n"
+                              f"mods {play.enabled_mods}")
+
+        if await compare_play_to_card(card[0], play):
+            await update_player_state(discord_id, f"claiming&{card[0]}&1")
+            await edit_message.add_reaction("❗")
+            await edit_message.add_reaction("♻")
+            embed.add_field(name="SNIPED!", value=f"Use ❗ to Claim card! (Gain card '{bmap.title}')\n"
+                                                  f"Use ♻ To claim BB instead (+30 BB)", inline=False)
+
+        else:
+            await update_player_state(discord_id, f"claiming&{card[0]}&0")
+            embed.add_field(name="Score fell short :(", value=f"Keep trying!", inline=False)
+
+
+    await edit_message.edit(content="", embed=embed)
+    await edit_message.add_reaction("🔄")
+
+
 ################################################################################################
 #bot functions
 ################################################################################################
 
 bot = commands.Bot(command_prefix='!')
 
+async def pm_player(discord_id, message=''):
+    player = await bot.fetch_user(user_id=int(discord_id))
+    await player.send(content=message)
+    
 # Adds a map set by difficulty ID to the local database and sheet
 @bot.command(aliases=["addmap", 'AddMap', 'addMap'])
 async def _addmap(ctx, *, map_id='0'):
@@ -974,6 +1185,10 @@ async def _getmap(ctx, min="1.0", max="10.0"):
 # Used to test whatever I'm working on
 @bot.command(aliases=["test"])
 async def _test(ctx):
+    await update_player_state(ctx.author.id, f"claiming&1")
+    message = await ctx.send("Loading....")
+    cashed_messages.append([ctx.author.id, message.id])
+    await check_defeat_card(ctx.author.id, message, '1')
     await claim_daily(ctx.author.id)
 
 # Used to Test new menus
@@ -1001,12 +1216,14 @@ async def _menu(ctx):
                                                                                f"⛔ Closes all open menus")  # ,color=Hex code
         embed.add_field(name="💰 Daily Tokens", value="Spend your tokens and get your daily tokens!")
         embed.add_field(name="💼 Inventory", value="View the cards you have obtained!")
-        embed.add_field(name="🤝 Trade", value="Trade with other players!")
+        #embed.add_field(name="🤝 Trade", value="Trade with other players!")
+        embed.add_field(name="🩸 Card Fight!", value="Assert your dominance\nOver other players!")
 
         message = await ctx.send(embed=embed)
         await message.add_reaction("💰")
         await message.add_reaction("💼")
-        await message.add_reaction("🤝")
+        #await message.add_reaction("🤝")
+        await message.add_reaction("🩸")
         await message.add_reaction("⛔")
         cashed_messages.append([ctx.author.id, message.id])
         await ctx.message.delete()
@@ -1070,6 +1287,6 @@ async def on_raw_reaction_add(payload):
 
 # Print the current time at start
 pprint(get_utc_timestep())
-
+pprint(arena_reference_list)
 # Run the bot
 bot.run(TestKey)
