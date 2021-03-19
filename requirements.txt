@@ -1,7 +1,7 @@
 gspread
 oauth2client
 osuapi
-pprint
 glob
 discord
 pillow
+shortuuid
