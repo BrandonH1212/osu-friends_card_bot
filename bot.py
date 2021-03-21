@@ -720,7 +720,7 @@ async def reaction_response(menu_id, discord_id, edit_message):
                     if menu_id == "❗":
                         await update_player_state(discord_id, "COM!")
                         await invalidate_arena(substate[1])
-                        await give_BB(discord_id, 5)
+                        await give_BB(discord_id, 10)
                         await give_card(discord_id, arena[0])
                         await pm_player(arena[1], f"Your card in the arena was beaten by {get_osu_name(discord_id)}\n"
                                                   "And obtained the card so it still around!\nAlthough it's in their inventory....")
@@ -825,6 +825,7 @@ async def reaction_response(menu_id, discord_id, edit_message):
         if "arena" in player_state:
             arenas = get_active_arenas()
             arena_keys = list(arena_reference_list.keys())
+
             letter_list = ["1️⃣", "2️⃣", "3️⃣"]
             for i, arena in enumerate(arenas):
                 if menu_id == letter_list[i]: # Not future proof for now will fix later when adding log
@@ -836,7 +837,7 @@ async def reaction_response(menu_id, discord_id, edit_message):
             return
 
 
-async def arena_fail_timer(arena_id, arena_challenger, time=600):
+async def arena_fail_timer(arena_id, arena_challenger, time=1200):
     await asyncio.sleep(time)
     if await is_arena_valid(arena_id):
         creator = arena_reference_list.get(arena_id)[1]
@@ -854,14 +855,15 @@ async def arena_menu(discord_id, edit_message):
     arenas = get_active_arenas()
     embed = discord.Embed(title=f"{get_osu_name(discord_id)}'s Arena menu", description=f"{len(arenas)}/3 cards In the arena\n Balance BB: {player_BB}\n"
                                                                                         f"🩸 Return to the fight menu\n"
-                                                                                        f"(Spend 15) To challenge one of these cards if you can submit a play equal or greater than the condition on the card\n"
-                                                                                        f"You will obtain that card along with 5BB")
+                                                                                        f"(Spend 15) To challenge one of the cards in the arena\nYou will then have (map_length * 5) to capture it\n"
+                                                                                        f"In that time you must submit a play with 'value'\n greater or equal then the condition of the card "
+                                                                                        f"If you succeed you can choose to obtain the card along with 10BB or just 20BB with no card Good luck!")
 
     if len(arenas) == 0:
         embed.add_field(name=f"Arena empty....",
                         value="Return to the fight menu to add a card", inline=False)
 
-    win_text = ['score', 'accuracy' , 'combo']
+    win_text = ['lol', 'score', 'accuracy', 'combo']
     letter_list = ["1️⃣","2️⃣","3️⃣"]
     for i, cards in enumerate(arenas):
         arena = arenas[i] # card_id 0 discord_id 1 time_created 2  win_condition 3
@@ -870,11 +872,12 @@ async def arena_menu(discord_id, edit_message):
         bmap = osuapi.get_beatmaps(beatmap_id=int(card[1]))[0]
 
         embed.add_field(name=f"{letter_list[i]} Song{bmap.title}\n Created by: {name}",
-                        value=f"Claim condition ({win_text[1-int(arena[3])]})\n"
+                        value=f"http://osu.ppy.sh/b/{card[1]}\nClaim condition ({win_text[int(arena[3])]})\n"
                                       f"{bmap.version} ⭐ {bmap.difficultyrating}\n"
                                       f"Score: {card[2]} Combo: {card[7]}\n"
                                       f"Rank: {card[4]}  ACC: {card[3]}\n"
-                                      f"mods: {card[5]}\n")
+                                      f"mods: {card[5]}\n"
+                              f"Time remaining: {round(((((float(arena[2])) - get_utc_timestep()) / 3600)+24), 1)}HR")
 
     await edit_message.edit(content="", embed=embed)
 
@@ -905,7 +908,7 @@ async def card_fight_menu(discord_id, edit_message):
     if len(arenas) < 3:
         embed.add_field(name=f"💢 Put a card in the arena (24HR)",
                         value="(spend 10 BB) "
-                              "Puts the selected card in the arena for 24 hours if a player defeats the card it is lost if not 10BB for every player defeated")
+                              "Puts the selected card in the arena for 24 hours if a player defeats the card it is lost if not gain 10BB for every player defeated")
     else:
         embed.add_field(name=f"☹ Arena is full",
                         value="There are currently 3/3 cards in the arena submissions are closed please defeat one of the other cards or wait for them to timeout")
@@ -975,15 +978,15 @@ async def compare_play_to_card(card_id, play, condition=1, accept_time=0,forced_
     card = card_reference_list.get(card_id)  # index0  difficultyID1 score2	accuracy3	rank4	mods5	initially obtained6 Combo7
     if str(card[5]) == str(play.enabled_mods) and get_custom_utc_timestep(play.date) > accept_time:
         if int(condition) == 1:
-            if int(play.score) > int(card[2]):
+            if int(play.score) >= int(card[2]):
                 return True
 
         if int(condition) == 2:
-            if float(get_acc(play)) > float(card[3]):
+            if float(get_acc(play)) >= float(card[3]):
                 return True
 
         if int(condition) == 3:
-            if int(play.maxcombo) > int(card[7]):
+            if int(play.maxcombo) >= int(card[7]):
                 return True
 
     return False
@@ -1303,7 +1306,7 @@ async def check_defeat_arena(discord_id, edit_message, arena_id):
     bmap = osuapi.get_beatmaps(beatmap_id=card[1])[0]
     sub_state = await get_player_sub_state(discord_id, "&")
 
-    time_remaining = round(600 -(int(get_utc_timestep()) - int(sub_state[3])))
+    time_remaining = round((bmap.total_length * 5) -(int(get_utc_timestep()) - int(sub_state[3])))
     try:
         play = await get_matching_score(discord_id, int(card[1]))
     except:
@@ -1334,7 +1337,7 @@ async def check_defeat_arena(discord_id, edit_message, arena_id):
             await update_player_state(discord_id, f"claiming&{arena_id}&1&{sub_state[3]}")
             await edit_message.add_reaction("❗")
             await edit_message.add_reaction("♻")
-            embed.add_field(name="SNIPED!", value=f"Use ❗ to Claim card! (Gain card '{bmap.title}' +5 BB)\n"
+            embed.add_field(name="SNIPED!", value=f"Use ❗ to Claim card! (Gain card '{bmap.title}' +10 BB)\n"
                                                   f"Use ♻ To claim BB instead (+20 BB)", inline=False)
 
         else:
@@ -1489,4 +1492,4 @@ pprint(get_utc_timestep())
 pprint(arena_reference_list)
 # Run the bot
 check_timers.start()
-bot.run(liveKey)
+bot.run(TestKey)
